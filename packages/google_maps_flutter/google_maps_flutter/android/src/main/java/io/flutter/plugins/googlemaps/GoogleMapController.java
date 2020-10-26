@@ -852,8 +852,6 @@ final class GoogleMapController
     if (registrar != null && registrar.activity() != null) {
       return registrar.activity().hashCode();
     } else {
-      // TODO(cyanglaz): Remove `getActivityHashCode()` and use a cached hashCode when creating the view for V1 embedding.
-      // https://github.com/flutter/flutter/issues/69128
       return -1;
     }
   }
