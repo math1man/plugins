@@ -524,15 +524,17 @@ final class GoogleMapController
   }
 
   // @Override
-  // The minimum supported version of Flutter doesn't have this method on the PlatformView interface, but the maximum
-  // does. This will override it when available even with the annotation commented out.
+  // The minimum supported version of Flutter doesn't have this method on the PlatformView
+  // interface, but the maximum does. This will override it when available even with the annotation
+  // commented out.
   public void onInputConnectionLocked() {
     // TODO(mklim): Remove this empty override once https://github.com/flutter/flutter/issues/40126 is fixed in stable.
   }
 
   // @Override
-  // The minimum supported version of Flutter doesn't have this method on the PlatformView interface, but the maximum
-  // does. This will override it when available even with the annotation commented out.
+  // The minimum supported version of Flutter doesn't have this method on the PlatformView
+  // interface, but the maximum does. This will override it when available even with the annotation
+  // commented out.
   public void onInputConnectionUnlocked() {
     // TODO(mklim): Remove this empty override once https://github.com/flutter/flutter/issues/40126 is fixed in stable.
   }
@@ -852,6 +854,8 @@ final class GoogleMapController
     if (registrar != null && registrar.activity() != null) {
       return registrar.activity().hashCode();
     } else {
+      // TODO(cyanglaz): Remove `getActivityHashCode()` and use a cached hashCode when creating the view for V1 embedding.
+      // https://github.com/flutter/flutter/issues/69128
       return -1;
     }
   }
