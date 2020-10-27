@@ -120,27 +120,29 @@ final class GoogleMapController
   }
 
   void init(State lifecycleState) {
-    switch (lifecycleState) {
-      case RESUMED:
-        mapView.onCreate(null);
-        mapView.onStart();
-        mapView.onResume();
-        break;
-      case STARTED:
-        mapView.onCreate(null);
-        mapView.onStart();
-        break;
-      case CREATED:
-        mapView.onCreate(null);
-        break;
-      case DESTROYED:
-      case INITIALIZED:
-        // Nothing to do, the activity has been completely destroyed or not yet created.
-        break;
-    }
     if (lifecycle != null) {
+      // This call automatically brings the observer up to the current state, which is equivalent to
+      // the switch statement below, hence the reason we can avoid it in this case.
       lifecycle.addObserver(this);
     } else {
+      switch (lifecycleState) {
+        case RESUMED:
+          mapView.onCreate(null);
+          mapView.onStart();
+          mapView.onResume();
+          break;
+        case STARTED:
+          mapView.onCreate(null);
+          mapView.onStart();
+          break;
+        case CREATED:
+          mapView.onCreate(null);
+          break;
+        case DESTROYED:
+        case INITIALIZED:
+          // Nothing to do, the activity has been completely destroyed or not yet created.
+          break;
+      }
       getApplication().registerActivityLifecycleCallbacks(this);
     }
     mapView.getMapAsync(this);
