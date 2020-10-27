@@ -53,8 +53,7 @@ public class GoogleMapsPlugin implements FlutterPlugin, ActivityAware, Lifecycle
                     public Lifecycle getLifecycle() {
                       return ((LifecycleOwner) activity).getLifecycle();
                     }
-                  }
-              ));
+                  }));
     } else {
       ProxyLifecycleProvider proxyLifecycleProvider = new ProxyLifecycleProvider(activity);
       activity.getApplication().registerActivityLifecycleCallbacks(proxyLifecycleProvider);
