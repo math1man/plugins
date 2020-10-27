@@ -6,6 +6,8 @@ package io.flutter.plugins.googlemaps;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.app.Application;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -17,6 +19,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.lifecycle.DefaultLifecycleObserver;
 import androidx.lifecycle.Lifecycle;
+import androidx.lifecycle.Lifecycle.State;
 import androidx.lifecycle.LifecycleOwner;
 import com.google.android.gms.maps.CameraUpdate;
 import com.google.android.gms.maps.GoogleMap;
@@ -36,6 +39,7 @@ import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
 import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
+import io.flutter.plugin.common.PluginRegistry;
 import io.flutter.plugin.platform.PlatformView;
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
@@ -46,7 +50,8 @@ import java.util.Map;
 
 /** Controller of a single GoogleMaps MapView instance. */
 final class GoogleMapController
-    implements DefaultLifecycleObserver,
+    implements Application.ActivityLifecycleCallbacks,
+        DefaultLifecycleObserver,
         ActivityPluginBinding.OnSaveInstanceStateListener,
         GoogleMapOptionsSink,
         MethodChannel.MethodCallHandler,
@@ -70,8 +75,12 @@ final class GoogleMapController
   private boolean disposed = false;
   private final float density;
   private MethodChannel.Result mapReadyResult;
+  @Nullable private final Lifecycle lifecycle;
   private final Context context;
-  private final LifecycleProvider lifecycleProvider;
+  // Do not use directly, use getApplication() instead to get correct application object for both v1
+  // and v2 embedding.
+  @Nullable private final Application mApplication;
+  @Nullable private final PluginRegistry.Registrar registrar; // For v1 embedding only.
   private final MarkersController markersController;
   private final PolygonsController polygonsController;
   private final PolylinesController polylinesController;
@@ -85,7 +94,9 @@ final class GoogleMapController
       int id,
       Context context,
       BinaryMessenger binaryMessenger,
-      LifecycleProvider lifecycleProvider,
+      @Nullable Application application,
+      @Nullable Lifecycle lifecycle,
+      @Nullable PluginRegistry.Registrar registrar,
       GoogleMapOptions options) {
     this.id = id;
     this.context = context;
@@ -94,7 +105,9 @@ final class GoogleMapController
     this.density = context.getResources().getDisplayMetrics().density;
     methodChannel = new MethodChannel(binaryMessenger, "plugins.flutter.io/google_maps_" + id);
     methodChannel.setMethodCallHandler(this);
-    this.lifecycleProvider = lifecycleProvider;
+    mApplication = application;
+    this.lifecycle = lifecycle;
+    this.registrar = registrar;
     this.markersController = new MarkersController(methodChannel);
     this.polygonsController = new PolygonsController(methodChannel, density);
     this.polylinesController = new PolylinesController(methodChannel, density);
@@ -106,8 +119,30 @@ final class GoogleMapController
     return mapView;
   }
 
-  void init() {
-    lifecycleProvider.getLifecycle().addObserver(this);
+  void init(State lifecycleState) {
+    switch (lifecycleState) {
+      case RESUMED:
+        mapView.onCreate(null);
+        mapView.onStart();
+        mapView.onResume();
+        break;
+      case STARTED:
+        mapView.onCreate(null);
+        mapView.onStart();
+        break;
+      case CREATED:
+        mapView.onCreate(null);
+        break;
+      case DESTROYED:
+      case INITIALIZED:
+        // Nothing to do, the activity has been completely destroyed or not yet created.
+        break;
+    }
+    if (lifecycle != null) {
+      lifecycle.addObserver(this);
+    } else {
+      getApplication().registerActivityLifecycleCallbacks(this);
+    }
     mapView.getMapAsync(this);
   }
 
@@ -472,10 +507,7 @@ final class GoogleMapController
     methodChannel.setMethodCallHandler(null);
     setGoogleMapListener(null);
     destroyMapViewIfNecessary();
-    Lifecycle lifecycle = lifecycleProvider.getLifecycle();
-    if (lifecycle != null) {
-      lifecycle.removeObserver(this);
-    }
+    getApplication().unregisterActivityLifecycleCallbacks(this);
   }
 
   private void setGoogleMapListener(@Nullable GoogleMapListener listener) {
@@ -505,7 +537,64 @@ final class GoogleMapController
     // TODO(mklim): Remove this empty override once https://github.com/flutter/flutter/issues/40126 is fixed in stable.
   }
 
-  // DefaultLifecycleObserver
+  // Application.ActivityLifecycleCallbacks methods
+  @Override
+  public void onActivityCreated(Activity activity, Bundle savedInstanceState) {
+    if (disposed || activity.hashCode() != getActivityHashCode()) {
+      return;
+    }
+    mapView.onCreate(savedInstanceState);
+  }
+
+  @Override
+  public void onActivityStarted(Activity activity) {
+    if (disposed || activity.hashCode() != getActivityHashCode()) {
+      return;
+    }
+    mapView.onStart();
+  }
+
+  @Override
+  public void onActivityResumed(Activity activity) {
+    if (disposed || activity.hashCode() != getActivityHashCode()) {
+      return;
+    }
+    mapView.onResume();
+  }
+
+  @Override
+  public void onActivityPaused(Activity activity) {
+    if (disposed || activity.hashCode() != getActivityHashCode()) {
+      return;
+    }
+    mapView.onPause();
+  }
+
+  @Override
+  public void onActivityStopped(Activity activity) {
+    if (disposed || activity.hashCode() != getActivityHashCode()) {
+      return;
+    }
+    mapView.onStop();
+  }
+
+  @Override
+  public void onActivitySaveInstanceState(Activity activity, Bundle outState) {
+    if (disposed || activity.hashCode() != getActivityHashCode()) {
+      return;
+    }
+    mapView.onSaveInstanceState(outState);
+  }
+
+  @Override
+  public void onActivityDestroyed(Activity activity) {
+    if (disposed || activity.hashCode() != getActivityHashCode()) {
+      return;
+    }
+    destroyMapViewIfNecessary();
+  }
+
+  // DefaultLifecycleObserver and OnSaveInstanceStateListener
 
   @Override
   public void onCreate(@NonNull LifecycleOwner owner) {
@@ -549,7 +638,6 @@ final class GoogleMapController
 
   @Override
   public void onDestroy(@NonNull LifecycleOwner owner) {
-    owner.getLifecycle().removeObserver(this);
     if (disposed) {
       return;
     }
@@ -758,6 +846,24 @@ final class GoogleMapController
     }
     return context.checkPermission(
         permission, android.os.Process.myPid(), android.os.Process.myUid());
+  }
+
+  private int getActivityHashCode() {
+    if (registrar != null && registrar.activity() != null) {
+      return registrar.activity().hashCode();
+    } else {
+      // TODO(cyanglaz): Remove `getActivityHashCode()` and use a cached hashCode when creating the view for V1 embedding.
+      // https://github.com/flutter/flutter/issues/69128
+      return -1;
+    }
+  }
+
+  private Application getApplication() {
+    if (registrar != null && registrar.activity() != null) {
+      return registrar.activity().getApplication();
+    } else {
+      return mApplication;
+    }
   }
 
   private void destroyMapViewIfNecessary() {
